@@ -1,0 +1,60 @@
+services:
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "2345:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:RELEASE.2023-09-07T02-05-02Z
+    container_name: minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Web Console
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio_init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until (mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}); do echo '...waiting for minio...' && sleep 1; done;
+      mc mb -p local/${MINIO_BUCKET_NAME} || true;
+      echo 'Bucket ensured: '${MINIO_BUCKET_NAME};
+      "
+
+  pgadmin:
+    image: dpage/pgadmin4:8.11
+    container_name: pgadmin
+    restart: always
+    depends_on:
+      - db
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_LISTEN_PORT: 80
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./database-connect.json:/pgadmin4/database-connect.json
+
+volumes:
+  postgres_data:
+  minio_data:
+  pgadmin_data:
